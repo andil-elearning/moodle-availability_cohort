@@ -225,6 +225,9 @@ class condition extends \core_availability\condition {
             // We have to check if the setting was set to any cohort and cohorts exist on the new instance.
             if ($this->cohortid == 0 && !empty(cohort_get_cohorts(\context_course::instance($courseid)->id))) {
                 $returnvalue = true;
+            } else if (\core_plugin_manager::instance()->get_plugin_info('tool_automatedrestore') && $DB->record_exists('automatedrestore_cohorts', ['previousid' => $this->cohortid])) {
+               // Availability is set to a cohort and tool_automatedrestore is present.
+                $returnvalue = true;
             } else {
                 // Availability was not set to any cohort, so do not include.
                 $returnvalue = false;
@@ -232,6 +235,35 @@ class condition extends \core_availability\condition {
         }
 
         return $returnvalue;
+    }
+
+    /**
+     * Updates this node after restore, returning true if anything changed.
+     * The default behaviour is simply to return false. If there is a problem
+     * with the update, $logger can be used to output a warning.
+     *
+     * @param string $restoreid Restore ID
+     * @param int $courseid ID of target course
+     * @param \base_logger $logger Logger for any warnings
+     * @param string $name Name of this item (for use in warning messages)
+     * @return bool True if there was any change
+     */
+    public function update_after_restore($restoreid, $courseid, \base_logger $logger, $name) {
+        global $DB;
+
+        // Load the restore controller.
+        $restorecontroller = \restore_controller::load_controller($restoreid);
+
+        // We aren't restoring on the same instance and tool_automatedrestore is present.
+        if (!$restorecontroller->is_samesite() && \core_plugin_manager::instance()->get_plugin_info('tool_automatedrestore')) {
+            $newcohortid = $DB->get_field('automatedrestore_cohorts', 'currentid', ['previousid' => $this->cohortid]);
+            if (!empty($newcohortid)) {
+                $this->cohortid = (int)$newcohortid;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
